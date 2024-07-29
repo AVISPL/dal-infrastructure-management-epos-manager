@@ -456,13 +456,12 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			String propertyValue = String.valueOf(controllableProperty.getValue());
 			if (propertyName.equals("TenantName")) {
 				Optional<Tenant> selectedTenant = tenantPage.getTenants().stream().filter(tenant -> tenant.getTenantName().equals(propertyValue)).findFirst();
-				selectedTenant.ifPresentOrElse(
-						tenant -> {
-							tenantPage.setSelectedTenant(tenant);
-							this.numberOfDevice = 0;
-						},
-						() -> {throw new IllegalArgumentException("Error when control tenant");}
-				);
+				if (selectedTenant.isPresent()) {
+					tenantPage.setSelectedTenant(selectedTenant.get());
+					this.numberOfDevice = 0;
+				} else {
+					throw new IllegalArgumentException("Error when control tenant");
+				}
 			}
 		} finally {
 			reentrantLock.unlock();
