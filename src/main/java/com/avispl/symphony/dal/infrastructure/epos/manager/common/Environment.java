@@ -83,6 +83,7 @@ public enum Environment {
 
 	/**
 	 * Get environment configuration by name
+	 *
 	 * @param name of environment
 	 */
 	public static Environment getEnvironmentByName(String name) {

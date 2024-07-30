@@ -9,14 +9,14 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * TenantPage  represents number of tenant per page
+ * TenantPage represents number of tenant per page
  *
  * @author Kevin / Symphony Dev Team<br>
  * Created on 7/11/2024
  * @since 1.0.0
  */
 public class TenantPage extends Paging {
-	private List<Tenant> tenants = Collections.synchronizedList(new ArrayList<>());
+	private final List<Tenant> tenants = Collections.synchronizedList(new ArrayList<>());
 	private Tenant selectedTenant;
 
 	public TenantPage(int take, int skip, int total) {
@@ -51,7 +51,8 @@ public class TenantPage extends Paging {
 	}
 
 	/**
-	 * Add or update specific tenant
+	 * Add or update a specific tenant
+	 *
 	 * @param tenant need to be added or updated
 	 */
 	public void addOrUpdateTenant(Tenant tenant) {

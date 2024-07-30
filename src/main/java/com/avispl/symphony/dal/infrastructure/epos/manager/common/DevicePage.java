@@ -11,14 +11,14 @@ import java.util.List;
 import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
 
 /**
- * DevicePage represents number of device per page
+ * DevicePage represents a number of device per page
  *
  * @author Kevin / Symphony Dev Team<br>
  * Created on 7/11/2024
  * @since 1.0.0
  */
 public class DevicePage extends Paging {
-	private List<AggregatedDevice> aggregatedDevices = Collections.synchronizedList(new ArrayList<>());
+	private final List<AggregatedDevice> aggregatedDevices = Collections.synchronizedList(new ArrayList<>());
 
 	public DevicePage(int take, int skip, int totalItem) {
 		super(take, skip, totalItem);
@@ -35,6 +35,7 @@ public class DevicePage extends Paging {
 
 	/**
 	 * Add or update specific device by id
+	 *
 	 * @param deviceId id of device
 	 * @param devices devices need to be add or update
 	 */

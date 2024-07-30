@@ -51,7 +51,7 @@ class EposManagerCommunicatorTest {
 	}
 
 	/**
-	 * Test case for getting all aggregator data
+	 * Test case for getting all aggregator data success
 	 */
 	@Test
 	void testGetAggregatorData() throws Exception {
@@ -67,7 +67,7 @@ class EposManagerCommunicatorTest {
 	}
 
 	/**
-	 * Test case for getting aggregated device info
+	 * Test case for getting aggregated device info success
 	 */
 	@Test
 	void testAggregatedDeviceInfo() throws Exception {
@@ -81,12 +81,24 @@ class EposManagerCommunicatorTest {
 		if (aggregatedDevice.isPresent()) {
 			Map<String, String> stats = aggregatedDevice.get().getProperties();
 			Assert.assertEquals(11, stats.size());
+			Assert.assertEquals("A004530221400032", aggregatedDevice.get().getDeviceId());
+			Assert.assertEquals("EXPAND Control T", aggregatedDevice.get().getDeviceModel());
+			Assert.assertEquals("Active", stats.get("Status"));
+			Assert.assertEquals("10.71.160.5", stats.get("LastContactIPAddress"));
+			Assert.assertEquals("2024-07-22 12:13", stats.get("FirstSeen"));
+			Assert.assertEquals("bd020520-fd25-4074-9ae8-948735208394", stats.get("CurrentUserID"));
+			Assert.assertEquals("2.0.24113.03", stats.get("FirstContactFWVersion"));
+			Assert.assertEquals("2.0.24113.03", stats.get("CurrentContactFWVersion"));
+			Assert.assertEquals("10.71.160.5", stats.get("FirstContactIPAddress"));
+			Assert.assertEquals("31439", stats.get("ProductID"));
+			Assert.assertEquals("99013dee-142a-44cd-85da-cacb882aca04", stats.get("ID"));
+			Assert.assertEquals("EPOS", stats.get("Vendor"));
+			Assert.assertEquals("2024-07-30 02:15", stats.get("LastSeen"));
 		}
 	}
 
 	/**
 	 * Test case for control tenant successfully
-	 * @throws Exception
 	 */
 	@Test
 	void testControlTenantNameSuccessFull() throws Exception {
@@ -119,7 +131,7 @@ class EposManagerCommunicatorTest {
 		String propertyName = "TenantName";
 		String propertyValue = "Symphony1";
 		control.setProperty(propertyName);
-		control.setProperty(propertyValue);
+		control.setValue(propertyValue);
 
 		Assertions.assertThrows(IllegalArgumentException.class, () -> eposManagerCommunicator.controlProperty(control));
 	}

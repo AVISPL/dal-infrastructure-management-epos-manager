@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * Tenant represent information of tenant in EPOS
+ * Tenant represents information of tenant in EPOS
  *
  * @author Kevin / Symphony Dev Team<br>
  * Created on 7/11/2024

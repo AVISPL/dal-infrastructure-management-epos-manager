@@ -9,8 +9,7 @@ import java.net.ConnectException;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -19,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -277,12 +277,12 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	private int numberOfTenant = 0;
 
 	/**
-	 * Default
+	 * Default hostname
 	 */
 	private String defaultHostName = EposManagerConstant.NONE;
 
 	/**
-	 * Pagination for device object
+	 * Pagination contain a list of all device related to specific tenant
 	 */
 	private DevicePage devicePage = new DevicePage(100, 0, 0);
 
@@ -292,7 +292,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	private int numberOfDevice = 0;
 
 	/**
-	 * Environment configuration for request api to authentication and data
+	 * Environment configuration specify subdomain for api call and authentication
 	 */
 	private String environment;
 
@@ -386,7 +386,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 
 
 	/**
-	 * Constructs a new instance of NanoSuiteCommunicator.
+	 * Constructs a new instance of EPOS Manager.
 	 */
 	public EposManagerCommunicator() throws IOException {
 		Map<String, PropertiesMapping> mapping = new PropertiesMappingParser().loadYML(EposManagerConstant.MODEL_MAPPING_AGGREGATED_DEVICE, getClass());
@@ -454,7 +454,8 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		try {
 			String propertyName = controllableProperty.getProperty();
 			String propertyValue = String.valueOf(controllableProperty.getValue());
-			if (propertyName.equals("TenantName")) {
+
+			if (propertyName.equals(EposManagerConstant.TENANT_NAME)) {
 				Optional<Tenant> selectedTenant = tenantPage.getTenants().stream().filter(tenant -> tenant.getTenantName().equals(propertyValue)).findFirst();
 				if (selectedTenant.isPresent()) {
 					tenantPage.setSelectedTenant(selectedTenant.get());
@@ -504,7 +505,6 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		String apiSubDomain = getCurrentEnvironment().getApiCallSubDomain();
 		this.defaultHostName = this.getHost();
 		this.setHost(createRequestUrl(apiSubDomain, this.defaultHostName));
-
 		this.executorService = Executors.newFixedThreadPool(1);
 		this.executorService.submit(deviceDataLoader = new EposManagerDataLoader());
 		super.internalInit();
@@ -620,13 +620,13 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 				Tenant selectedTenant = tenantPage.getSelectedTenant() == null || !tenants.contains(tenantPage.getSelectedTenant()) ? tenants.get(0) : tenantPage.getSelectedTenant();
 				tenantPage.setSelectedTenant(selectedTenant);
 
-				stats.put("TenantID", getDefaultValueForNullData(selectedTenant.getTenantId()));
-				stats.put("CompanyName", getDefaultValueForNullData(selectedTenant.getTenantName()));
+				stats.put(EposManagerConstant.TENANT_ID, getDefaultValueForNullData(selectedTenant.getTenantId()));
+				stats.put(EposManagerConstant.COMPANY_NAME, getDefaultValueForNullData(selectedTenant.getCompanyName()));
 
 				String tenantName = getDefaultValueForNullData(selectedTenant.getTenantName());
 				if (tenantName != null) {
 					String[] values = tenants.stream().map(Tenant::getTenantName).toArray(String[]::new);
-					addAdvancedControlProperties(advancedControllableProperties, stats, createDropdown("TenantName", values, tenantName), tenantName);
+					addAdvancedControlProperties(advancedControllableProperties, stats, createDropdown(EposManagerConstant.TENANT_NAME, values, tenantName), tenantName);
 				}
 			}
 		} catch (Exception e) {
@@ -648,6 +648,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			if (!tenantPage.hasReachedEndPage()) {
 				String url = String.format(EposManagerUri.TENANTS, tenantPage.getTake(), tenantPage.getSkip());
 				JsonNode response = this.doGet(url, JsonNode.class);
+
 				if (response != null && response.has("items")) {
 					List<Tenant> tenants = objectMapper.readerFor(new TypeReference<List<Tenant>>() {}).readValue(response.get("items"));
 
@@ -667,13 +668,14 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	}
 
 	/**
-	 * Retrieve total number of tenants by sending GET request to Epos API endpoint.
+	 * Retrieve number of total tenants by sending GET request to Epos API endpoint.
 	 */
 	private void getNumberOfTenant() {
 		try {
 			int take = 1, skip = 0;
 			String url = String.format(EposManagerUri.TENANTS, take, skip);
 			JsonNode response = this.doGet(url, JsonNode.class);
+
 			if (response != null && response.has("total")) {
 				tenantPage.setTotalItem(response.get("total").asInt());
 			}
@@ -687,6 +689,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 
 	/**
 	 * Populate device details by making GET request to retrieve all aggregated device info from EPOS Manager.
+	 * By default take 100 devices per request.
 	 */
 	private void populateDeviceDetail(){
 		if (numberOfDevice != devicePage.getTotalItem()) {
@@ -729,13 +732,13 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 
 			String url = String.format(EposManagerUri.DEVICES, tenant.getTenantId(), take, skip);
 			JsonNode response = this.doGet(url, JsonNode.class);
-			int deviceNumber = 0;
 
+			int deviceNumber = 0;
 			if (response != null && response.has("total")) {
 				deviceNumber = response.get("total").asInt();
 				devicePage.setTotalItem(deviceNumber);
 			}
-			stats.put("TotalDevices", String.valueOf(deviceNumber));
+			stats.put(EposManagerConstant.TOTAL_DEVICES, String.valueOf(deviceNumber));
 		} catch (FailedLoginException e) {
 			loginInfo = null;
 			logger.error("Authentication credentials are invalid, access token might be expired", e);
@@ -743,7 +746,6 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			throw new ResourceNotReachableException("Failed to retrieve total of devices", e);
 		}
 	}
-
 
 	/**
 	 * Clones and populates a new list of aggregated devices with mapped monitoring properties.
@@ -783,7 +785,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			switch (property) {
 				case FIRST_SEEN:
 				case LAST_SEEN:
-					stats.put(propertyName, formatIsoTime(propertyValue));
+					stats.put(propertyName, convertDateTimeFormat(propertyValue));
 					break;
 				default:
 					stats.put(propertyName, propertyValue);
@@ -797,17 +799,20 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	 * @param value - ISO-8601 string
 	 * @return format datetime
 	 */
-	private String formatIsoTime(String value) {
-		String result;
+	private String convertDateTimeFormat(String value) {
 		try {
-			DateTimeFormatter isoFormatter = DateTimeFormatter.ISO_DATE_TIME;
-			DateTimeFormatter outputFormatter = DateTimeFormatter.ofPattern(EposManagerConstant.YYYY_MM_DD_HH_MM);
-			LocalDateTime dateTime = LocalDateTime.parse(value, isoFormatter);
-			result = dateTime.format(outputFormatter);
-		} catch (Exception ignored) {
-			result = EposManagerConstant.NONE;
+			SimpleDateFormat inputFormat = new SimpleDateFormat(EposManagerConstant.SOURCE_FORMAT_DATETIME);
+			inputFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
+
+			SimpleDateFormat outputFormat = new SimpleDateFormat(EposManagerConstant.YYYY_MM_DD_HH_MM);
+			outputFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
+
+			Date date = inputFormat.parse(value);
+			return outputFormat.format(date);
+		} catch (Exception e) {
+			logger.warn("Can't convert the date time value");
+			return EposManagerConstant.NONE;
 		}
-		return result;
 	}
 
 	/**
@@ -871,6 +876,6 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		if (Objects.equals(subDomain, EposManagerConstant.NONE)) {
 			return subDomain;
 		}
-		return subDomain + "." + hostName;
+		return subDomain + EposManagerConstant.DOT + hostName;
 	}
 }

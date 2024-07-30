@@ -5,7 +5,7 @@
 package com.avispl.symphony.dal.infrastructure.epos.manager.common;
 
 /**
- * AggregatedInformation represent list of monitoring properties for aggregated device
+ * AggregatedInformation represents a list of monitoring properties for aggregated device
  *
  * @author Kevin / Symphony Dev Team<br>
  * Created on 7/11/2024
