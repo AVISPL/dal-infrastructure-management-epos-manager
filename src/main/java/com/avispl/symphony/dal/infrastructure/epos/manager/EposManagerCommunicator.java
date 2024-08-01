@@ -601,6 +601,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 					throw new FailedLoginException("Unable to login. Please check device credentials");
 				}
 			}
+			throw new ResourceNotReachableException("An error occurred while retrieving authentication information", e);
 		} catch (Exception exception) {
 			throw new ResourceNotReachableException("Failed to retrieve authentication information, endpoint not reachable", exception);
 		}
