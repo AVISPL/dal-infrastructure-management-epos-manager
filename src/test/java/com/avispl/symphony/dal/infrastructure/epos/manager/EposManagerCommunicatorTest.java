@@ -82,7 +82,7 @@ class EposManagerCommunicatorTest {
 			Map<String, String> stats = aggregatedDevice.get().getProperties();
 			Assert.assertEquals(11, stats.size());
 			Assert.assertEquals("A004530221400032", aggregatedDevice.get().getDeviceId());
-			Assert.assertEquals("EXPAND Control T", aggregatedDevice.get().getDeviceModel());
+			Assert.assertEquals("EXPAND Control (Teams)", aggregatedDevice.get().getDeviceModel());
 			Assert.assertEquals("Active", stats.get("Status"));
 			Assert.assertEquals("10.71.160.5", stats.get("LastContactIPAddress"));
 			Assert.assertEquals("2024-07-22 12:13", stats.get("FirstSeen"));
