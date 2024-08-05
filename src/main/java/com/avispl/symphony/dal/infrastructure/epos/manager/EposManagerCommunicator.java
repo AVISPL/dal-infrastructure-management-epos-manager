@@ -56,6 +56,7 @@ import com.avispl.symphony.dal.aggregator.parser.PropertiesMapping;
 import com.avispl.symphony.dal.aggregator.parser.PropertiesMappingParser;
 import com.avispl.symphony.dal.communicator.RestCommunicator;
 import com.avispl.symphony.dal.infrastructure.epos.manager.common.AggregatedInformation;
+import com.avispl.symphony.dal.infrastructure.epos.manager.common.DeviceNameMapping;
 import com.avispl.symphony.dal.infrastructure.epos.manager.common.DevicePage;
 import com.avispl.symphony.dal.infrastructure.epos.manager.common.Environment;
 import com.avispl.symphony.dal.infrastructure.epos.manager.common.EposManagerConstant;
@@ -535,6 +536,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		this.devicePage = new DevicePage(100, 0, 0);
 		this.numberOfTenant = 0;
 		this.numberOfDevice = 0;
+		this.loginInfo = null;
 		this.defaultHostName = EposManagerConstant.NONE;
 		super.internalDestroy();
 	}
@@ -760,8 +762,12 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 				AggregatedDevice aggregatedDevice = new AggregatedDevice();
 				Map<String, String> properties = device.getProperties();
 				aggregatedDevice.setDeviceId(device.getDeviceId());
-				aggregatedDevice.setDeviceName(device.getDeviceName());
-				aggregatedDevice.setDeviceModel(device.getDeviceName());
+				String deviceName = device.getDeviceName();
+				DeviceNameMapping deviceNameMapping = DeviceNameMapping.getDeviceNameByApiResponse(deviceName);
+				if (deviceNameMapping != null) {
+					deviceName = deviceNameMapping.getDisplayName();
+				}
+				aggregatedDevice.setDeviceName(deviceName);
 				aggregatedDevice.setDeviceOnline(device.getDeviceOnline());
 
 				Map<String, String> stats = new HashMap<>();
@@ -864,7 +870,11 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	 * Get current environment configuration
 	 */
 	private Environment getCurrentEnvironment() {
-		return getDefaultValueForNullData(this.environment).equals(EposManagerConstant.NONE) ? Environment.PRODUCTION : Environment.STAGING;
+		Environment environment = Environment.PRODUCTION;
+		if (getDefaultValueForNullData(this.environment).equals(Environment.STAGING.getName())) {
+			environment = Environment.STAGING;
+		}
+		return environment;
 	}
 
 	/**

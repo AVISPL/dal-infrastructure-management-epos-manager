@@ -82,10 +82,9 @@ class EposManagerCommunicatorTest {
 			Map<String, String> stats = aggregatedDevice.get().getProperties();
 			Assert.assertEquals(11, stats.size());
 			Assert.assertEquals("A004530221400032", aggregatedDevice.get().getDeviceId());
-			Assert.assertEquals("EXPAND Control T", aggregatedDevice.get().getDeviceModel());
 			Assert.assertEquals("Active", stats.get("Status"));
 			Assert.assertEquals("10.71.160.5", stats.get("LastContactIPAddress"));
-			Assert.assertEquals("2024-07-22 12:13", stats.get("FirstSeen"));
+			Assert.assertEquals("2024-07-22 12:13", stats.get("FirstSeen(GMT)"));
 			Assert.assertEquals("bd020520-fd25-4074-9ae8-948735208394", stats.get("CurrentUserID"));
 			Assert.assertEquals("2.0.24113.03", stats.get("FirstContactFWVersion"));
 			Assert.assertEquals("2.0.24113.03", stats.get("CurrentContactFWVersion"));
@@ -93,7 +92,7 @@ class EposManagerCommunicatorTest {
 			Assert.assertEquals("31439", stats.get("ProductID"));
 			Assert.assertEquals("99013dee-142a-44cd-85da-cacb882aca04", stats.get("ID"));
 			Assert.assertEquals("EPOS", stats.get("Vendor"));
-			Assert.assertEquals("2024-07-30 02:15", stats.get("LastSeen"));
+			Assert.assertEquals("2024-07-30 02:15", stats.get("LastSeen(GMT)"));
 		}
 	}
 
