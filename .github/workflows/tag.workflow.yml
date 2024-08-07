@@ -39,6 +39,9 @@ jobs:
         id: tagname
         run: echo "tagname=${{ needs.prep.outputs.ver }}-${{ needs.prep.outputs.date }}-${{ needs.prep.outputs.rev }}" >> $GITHUB_OUTPUT
 
+      - name: Fetch tags from remote
+        run: git fetch --tags
+
       - name: Delete existing tags with same version
         run: |
           version="${{ needs.prep.outputs.ver }}"
