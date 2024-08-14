@@ -1,0 +1,22 @@
+models:
+  - model:
+      name: Generic
+      vendor: EposManager
+      filter: true
+      mapping:
+        deviceId: get("deviceId")
+        deviceName: get("name")
+        deviceModel: get("name")
+        deviceOnline: get("status").asText().equalsIgnoreCase("Active")
+      properties:
+        ID: get("id")
+        ProductID: get("productId")
+        Vendor: get("vendor")
+        FirstSeen(GMT): get("firstSeen")
+        LastSeen(GMT): get("lastSeen")
+        FirstContactFWVersion: get("firstContactFwVersion")
+        CurrentContactFWVersion: get("currentContactFwVersion")
+        FirstContactIPAddress: get("firstContactIpAddress")
+        LastContactIPAddress: get("lastContactIpAddress")
+        CurrentUserID: get("currentUserId")
+        Status: get("status")
