@@ -104,6 +104,7 @@ class EposManagerCommunicatorTest {
 	 */
 	@Test
 	void testAggregatedDeviceInfo() throws Exception {
+		eposManagerCommunicator.setTenantId("ffb0b6cd-d08b-44d4-8286-eebbe01c1ac5");
 		eposManagerCommunicator.getMultipleStatistics();
 		eposManagerCommunicator.retrieveMultipleStatistics();
 		Thread.sleep(30000);

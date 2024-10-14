@@ -775,6 +775,9 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 				case LAST_SEEN:
 					stats.put(propertyName, convertDateTimeFormat(propertyValue));
 					break;
+				case STATUS:
+					stats.put(propertyName, formatDeviceStatus(propertyValue));
+					break;
 				default:
 					stats.put(propertyName, propertyValue);
 			}
@@ -801,6 +804,18 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			logger.warn("Can't convert the date time value");
 			return EposManagerConstant.NONE;
 		}
+	}
+
+	/**
+	 * Format device status from api response to symphony format
+	 * @param value api response value
+	 * @return format device status
+	 */
+	private String formatDeviceStatus(String value) {
+		if (value.equalsIgnoreCase("InActive")) {
+			return EposManagerConstant.INACTIVE_STATUS;
+		}
+		return value;
 	}
 
 	/**
