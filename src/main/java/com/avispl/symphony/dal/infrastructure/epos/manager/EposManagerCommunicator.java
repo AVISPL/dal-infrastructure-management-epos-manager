@@ -17,7 +17,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,26 +24,21 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
+import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.CollectionUtils;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.http.HttpEntity;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import javax.security.auth.login.FailedLoginException;
 
-import com.avispl.symphony.api.dal.control.Controller;
-import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
-import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty.DropDown;
-import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
 import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
@@ -98,7 +92,7 @@ import com.avispl.symphony.dal.util.StringUtils;
  * Created on 7/11/2024
  * @since 1.0.0
  */
-public class EposManagerCommunicator extends RestCommunicator implements Aggregator, Monitorable, Controller {
+public class EposManagerCommunicator extends RestCommunicator implements Aggregator, Monitorable {
 
 	/**
 	 * Process that is running constantly and triggers collecting data from Epos Manager API endpoints, based on the given timeouts and thresholds.
@@ -298,6 +292,11 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	private String environment;
 
 	/**
+	 * tenantId configuration specify selected tenant to fetch all devices
+	 */
+	private String tenantId = EposManagerConstant.EMPTY;
+
+	/**
 	 * Retrieves {@link #environment}
 	 *
 	 * @return value of {@link #environment}
@@ -313,6 +312,24 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	 */
 	public void setEnvironment(String environment) {
 		this.environment = environment;
+	}
+
+	/**
+	 * Retrieves {@link #tenantId}
+	 *
+	 * @return value of {@link #tenantId}
+	 */
+	public String getTenantId() {
+		return tenantId;
+	}
+
+	/**
+	 * Sets {@link #tenantId} value
+	 *
+	 * @param tenantId new value of {@link #tenantId}
+	 */
+	public void setTenantId(String tenantId) {
+		this.tenantId = tenantId;
 	}
 
 	/**
@@ -405,13 +422,11 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			checkAuthentication();
 			Map<String, String> statistics = new HashMap<>();
 			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
-			List<AdvancedControllableProperty> advancedControllableProperties = new ArrayList<>();
 			getTenantsInfo();
-			populateTenantInfo(statistics, advancedControllableProperties);
+			populateTenantInfo(statistics);
 
 			getNumberOfDevice(statistics);
 			extendedStatistics.setStatistics(statistics);
-			extendedStatistics.setControllableProperties(advancedControllableProperties);
 			localExtendedStatistics = extendedStatistics;
 		} finally {
 			reentrantLock.unlock();
@@ -444,47 +459,6 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	@Override
 	public List<AggregatedDevice> retrieveMultipleStatistics(List<String> list) throws Exception {
 		return retrieveMultipleStatistics().stream().filter(aggregatedDevice -> list.contains(aggregatedDevice.getDeviceId())).collect(Collectors.toList());
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void controlProperty(ControllableProperty controllableProperty) throws Exception {
-		reentrantLock.lock();
-		try {
-			String propertyName = controllableProperty.getProperty();
-			String propertyValue = String.valueOf(controllableProperty.getValue());
-
-			if (propertyName.equals(EposManagerConstant.TENANT_NAME)) {
-				Optional<Tenant> selectedTenant = tenantPage.getTenants().stream().filter(tenant -> tenant.getTenantName().equals(propertyValue)).findFirst();
-				if (selectedTenant.isPresent()) {
-					tenantPage.setSelectedTenant(selectedTenant.get());
-					this.numberOfDevice = 0;
-				} else {
-					throw new IllegalArgumentException("Error when control tenant");
-				}
-			}
-		} finally {
-			reentrantLock.unlock();
-		}
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void controlProperties(List<ControllableProperty> controllableProperties) throws Exception {
-		if (CollectionUtils.isEmpty(controllableProperties)) {
-			throw new IllegalArgumentException("ControllableProperties can not be null or empty");
-		}
-		for (ControllableProperty p : controllableProperties) {
-			try {
-				controlProperty(p);
-			} catch (Exception e) {
-				logger.error(String.format("Error when control property %s", p.getProperty()), e);
-			}
-		}
 	}
 
 	/**
@@ -538,6 +512,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		this.numberOfDevice = 0;
 		this.loginInfo = null;
 		this.defaultHostName = EposManagerConstant.NONE;
+		this.tenantId = EposManagerConstant.EMPTY;
 		super.internalDestroy();
 	}
 
@@ -611,29 +586,30 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	}
 
 	/**
-	 * Populate tenant information into provided stats map and advanced controllable properties list.
+	 * Populate tenant information into provided stats map
 	 *
 	 * @param stats the map to store statistic properties.
-	 * @param advancedControllableProperties the list to store controllable properties.
 	 */
-	private void populateTenantInfo(Map<String, String> stats, List<AdvancedControllableProperty> advancedControllableProperties) {
+	private void populateTenantInfo(Map<String, String> stats) {
 		try {
 			List<Tenant> tenants = tenantPage.getTenants();
 			if (tenants != null && !tenants.isEmpty()) {
-				Tenant selectedTenant = tenantPage.getSelectedTenant() == null || !tenants.contains(tenantPage.getSelectedTenant()) ? tenants.get(0) : tenantPage.getSelectedTenant();
-				tenantPage.setSelectedTenant(selectedTenant);
-
-				stats.put(EposManagerConstant.TENANT_ID, getDefaultValueForNullData(selectedTenant.getTenantId()));
-				stats.put(EposManagerConstant.COMPANY_NAME, getDefaultValueForNullData(selectedTenant.getCompanyName()));
-
-				String tenantName = getDefaultValueForNullData(selectedTenant.getTenantName());
-				if (tenantName != null) {
-					String[] values = tenants.stream().map(Tenant::getTenantName).toArray(String[]::new);
-					addAdvancedControlProperties(advancedControllableProperties, stats, createDropdown(EposManagerConstant.TENANT_NAME, values, tenantName), tenantName);
+				if (!Objects.equals(tenantId, EposManagerConstant.EMPTY)) {
+					Tenant selectedTenant = tenants.stream().filter(tenant -> tenant.getTenantId().equals(tenantId)).findFirst().orElse(null);
+					if (selectedTenant != null) {
+						tenantPage.setSelectedTenant(selectedTenant);
+					}
+					stats.put(EposManagerConstant.TENANT_ID, getDefaultValueForNullData(tenantId));
+					stats.put(EposManagerConstant.COMPANY_NAME, getDefaultValueForNullData(selectedTenant != null ? selectedTenant.getCompanyName() : EposManagerConstant.EMPTY));
+					stats.put(EposManagerConstant.TENANT_NAME, getDefaultValueForNullData(selectedTenant != null ? selectedTenant.getTenantName() : EposManagerConstant.EMPTY));
+				} else {
+					stats.put(EposManagerConstant.TENANT_ID, EposManagerConstant.UNKNOWN);
+					stats.put(EposManagerConstant.COMPANY_NAME, EposManagerConstant.UNKNOWN);
+					stats.put(EposManagerConstant.TENANT_NAME, EposManagerConstant.UNKNOWN);
 				}
 			}
 		} catch (Exception e) {
-			logger.error("Failed to populate tenants information", e);
+			logger.error("Failed to populate tenants information with tenantId " + tenantId, e);
 		}
 	}
 
@@ -700,6 +676,8 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			devicePage = new DevicePage(100, 0, numberOfDevice);
 		}
 
+		if (Objects.equals(tenantId, EposManagerConstant.EMPTY) || tenantPage.getSelectedTenant() == null) return;
+
 		try {
 			if (!devicePage.hasReachedEndPage()) {
 				String url = String.format(EposManagerUri.DEVICES, tenantPage.getSelectedTenant().getTenantId(), devicePage.getTake(), devicePage.getSkip());
@@ -720,7 +698,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			loginInfo = null;
 			logger.error("Authentication credentials are invalid, access token might be expired", e);
 		} catch (Exception e) {
-			throw new ResourceNotReachableException("Failed to retrieve device information", e);
+			throw new ResourceNotReachableException("Failed to retrieve device information for tenantId " + tenantId, e);
 		}
 	}
 
@@ -731,7 +709,10 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		try {
 			int take = 1, skip = 0;
 			Tenant tenant = tenantPage.getSelectedTenant();
-			if (tenant == null) return;
+			if (tenant == null){
+				stats.put(EposManagerConstant.TOTAL_DEVICES, "0");
+				return;
+			}
 
 			String url = String.format(EposManagerUri.DEVICES, tenant.getTenantId(), take, skip);
 			JsonNode response = this.doGet(url, JsonNode.class);
@@ -780,7 +761,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	}
 
 	/**
-	 * Get all monitoring property cache from device page to statistic and advance control properties.
+	 * Get all monitoring property cache from device page to statistic
 	 *
 	 * @param properties the map contain cache data
 	 * @param stats the map contain monitoring properties.
@@ -793,6 +774,9 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 				case FIRST_SEEN:
 				case LAST_SEEN:
 					stats.put(propertyName, convertDateTimeFormat(propertyValue));
+					break;
+				case STATUS:
+					stats.put(propertyName, formatDeviceStatus(propertyValue));
 					break;
 				default:
 					stats.put(propertyName, propertyValue);
@@ -823,37 +807,15 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	}
 
 	/**
-	 * Add addAdvancedControlProperties if advancedControllableProperties different empty
-	 *
-	 * @param advancedControllableProperties advancedControllableProperties is the list that store all controllable properties
-	 * @param stats store all statistics
-	 * @param property the property is item advancedControllableProperties
-	 * @throws IllegalStateException when exception occur
+	 * Format device status from api response to symphony format
+	 * @param value api response value
+	 * @return format device status
 	 */
-	private void addAdvancedControlProperties(List<AdvancedControllableProperty> advancedControllableProperties, Map<String, String> stats, AdvancedControllableProperty property, String value) {
-		if (property != null) {
-			advancedControllableProperties.removeIf(controllableProperty -> controllableProperty.getName().equals(property.getName()));
-
-			String propertyValue = StringUtils.isNotNullOrEmpty(value) ? value : EposManagerConstant.EMPTY;
-			stats.put(property.getName(), propertyValue);
-
-			advancedControllableProperties.add(property);
+	private String formatDeviceStatus(String value) {
+		if (value.equalsIgnoreCase("InActive")) {
+			return EposManagerConstant.INACTIVE_STATUS;
 		}
-	}
-
-	/**
-	 * Create dropdown advanced controllable property
-	 *
-	 * @param name the name of the control
-	 * @param initialValue initial value of the control
-	 * @return AdvancedControllableProperty dropdown instance
-	 */
-	private AdvancedControllableProperty createDropdown(String name, String[] values, String initialValue) {
-		DropDown dropDown = new DropDown();
-		dropDown.setOptions(values);
-		dropDown.setLabels(values);
-
-		return new AdvancedControllableProperty(name, new Date(), dropDown, initialValue);
+		return value;
 	}
 
 	/**

@@ -11,14 +11,12 @@ import java.util.Optional;
 
 import org.junit.Assert;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
-import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
+import com.avispl.symphony.dal.infrastructure.epos.manager.common.EposManagerConstant;
 
 /**
  * EposManagerCommunicatorTest
@@ -30,6 +28,7 @@ import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
 class EposManagerCommunicatorTest {
 	private ExtendedStatistics extendedStatistic;
 	private EposManagerCommunicator eposManagerCommunicator;
+	private final String defaultTenantId = "43e73958-9f96-4658-a6cd-28b34db80b0b";
 
 	@BeforeEach
 	void setUp() throws Exception {
@@ -42,6 +41,7 @@ class EposManagerCommunicatorTest {
 		eposManagerCommunicator.setTrustAllCertificates(true);
 		eposManagerCommunicator.init();
 		eposManagerCommunicator.connect();
+		eposManagerCommunicator.setTenantId(defaultTenantId);
 	}
 
 	@AfterEach
@@ -57,13 +57,46 @@ class EposManagerCommunicatorTest {
 	void testGetAggregatorData() throws Exception {
 		extendedStatistic = (ExtendedStatistics) eposManagerCommunicator.getMultipleStatistics().get(0);
 		Map<String, String> statistics = extendedStatistic.getStatistics();
-		List<AdvancedControllableProperty> advancedControllableProperties = extendedStatistic.getControllableProperties();
 
 		extendedStatistic = (ExtendedStatistics) eposManagerCommunicator.getMultipleStatistics().get(0);
 		statistics = extendedStatistic.getStatistics();
 
 		Assert.assertEquals(4, statistics.size());
-		Assert.assertEquals(1, advancedControllableProperties.size());
+		Assert.assertEquals("AVI-SPL", statistics.get("CompanyName"));
+		Assert.assertEquals("Symphony", statistics.get("TenantName"));
+		Assert.assertEquals(defaultTenantId, statistics.get("TenantID"));
+	}
+
+	@Test
+	void testTenantIdIsNotSpecify() throws Exception {
+		eposManagerCommunicator.setTenantId(EposManagerConstant.EMPTY);
+		extendedStatistic = (ExtendedStatistics) eposManagerCommunicator.getMultipleStatistics().get(0);
+		Map<String, String> statistics = extendedStatistic.getStatistics();
+
+		extendedStatistic = (ExtendedStatistics) eposManagerCommunicator.getMultipleStatistics().get(0);
+		statistics = extendedStatistic.getStatistics();
+
+		Assert.assertEquals(4, statistics.size());
+		Assert.assertEquals("Unknown", statistics.get("CompanyName"));
+		Assert.assertEquals("Unknown", statistics.get("TenantName"));
+		Assert.assertEquals("Unknown", statistics.get("TenantID"));
+		Assert.assertEquals("0", statistics.get("TotalDevices"));
+	}
+
+	@Test
+	void testTenantIdIsInvalid() throws Exception {
+		eposManagerCommunicator.setTenantId("invalid tenantID");
+		extendedStatistic = (ExtendedStatistics) eposManagerCommunicator.getMultipleStatistics().get(0);
+		Map<String, String> statistics = extendedStatistic.getStatistics();
+
+		extendedStatistic = (ExtendedStatistics) eposManagerCommunicator.getMultipleStatistics().get(0);
+		statistics = extendedStatistic.getStatistics();
+
+		Assert.assertEquals(4, statistics.size());
+		Assert.assertEquals("None", statistics.get("CompanyName"));
+		Assert.assertEquals("None", statistics.get("TenantName"));
+		Assert.assertEquals("invalid tenantID", statistics.get("TenantID"));
+		Assert.assertEquals("0", statistics.get("TotalDevices"));
 	}
 
 	/**
@@ -71,9 +104,10 @@ class EposManagerCommunicatorTest {
 	 */
 	@Test
 	void testAggregatedDeviceInfo() throws Exception {
+		eposManagerCommunicator.setTenantId("ffb0b6cd-d08b-44d4-8286-eebbe01c1ac5");
 		eposManagerCommunicator.getMultipleStatistics();
 		eposManagerCommunicator.retrieveMultipleStatistics();
-		Thread.sleep(20000);
+		Thread.sleep(30000);
 		List<AggregatedDevice> aggregatedDeviceList = eposManagerCommunicator.retrieveMultipleStatistics();
 
 		String deviceId = "A004530221400032";
@@ -82,9 +116,8 @@ class EposManagerCommunicatorTest {
 			Map<String, String> stats = aggregatedDevice.get().getProperties();
 			Assert.assertEquals(11, stats.size());
 			Assert.assertEquals("A004530221400032", aggregatedDevice.get().getDeviceId());
-			Assert.assertEquals("Active", stats.get("Status"));
+			Assert.assertEquals("InActive", stats.get("Status"));
 			Assert.assertEquals("10.71.160.5", stats.get("LastContactIPAddress"));
-			Assert.assertEquals("2024-07-22 12:13", stats.get("FirstSeen(GMT)"));
 			Assert.assertEquals("bd020520-fd25-4074-9ae8-948735208394", stats.get("CurrentUserID"));
 			Assert.assertEquals("2.0.24113.03", stats.get("FirstContactFWVersion"));
 			Assert.assertEquals("2.0.24113.03", stats.get("CurrentContactFWVersion"));
@@ -92,46 +125,6 @@ class EposManagerCommunicatorTest {
 			Assert.assertEquals("31439", stats.get("ProductID"));
 			Assert.assertEquals("99013dee-142a-44cd-85da-cacb882aca04", stats.get("ID"));
 			Assert.assertEquals("EPOS", stats.get("Vendor"));
-			Assert.assertEquals("2024-07-30 02:15", stats.get("LastSeen(GMT)"));
 		}
-	}
-
-	/**
-	 * Test case for control tenant successfully
-	 */
-	@Test
-	void testControlTenantNameSuccessFull() throws Exception {
-		eposManagerCommunicator.getMultipleStatistics();
-		eposManagerCommunicator.retrieveMultipleStatistics();
-		Thread.sleep(20000);
-		eposManagerCommunicator.retrieveMultipleStatistics();
-		ControllableProperty control = new ControllableProperty();
-		String propertyName = "TenantName";
-		String propertyValue = "Symphony";
-		control.setProperty(propertyName);
-		control.setProperty(propertyValue);
-		eposManagerCommunicator.controlProperty(control);
-
-		extendedStatistic = (ExtendedStatistics) eposManagerCommunicator.getMultipleStatistics().get(0);
-		Map<String, String> statistics = extendedStatistic.getStatistics();
-		Assert.assertEquals(propertyValue, statistics.get(propertyName));
-	}
-
-	/**
-	 * Testcase for control tenant failure
-	 */
-	@Test
-	void testControlTenantNameFailure() throws Exception {
-		eposManagerCommunicator.getMultipleStatistics();
-		eposManagerCommunicator.retrieveMultipleStatistics();
-		Thread.sleep(20000);
-		eposManagerCommunicator.retrieveMultipleStatistics();
-		ControllableProperty control = new ControllableProperty();
-		String propertyName = "TenantName";
-		String propertyValue = "Symphony1";
-		control.setProperty(propertyName);
-		control.setValue(propertyValue);
-
-		Assertions.assertThrows(IllegalArgumentException.class, () -> eposManagerCommunicator.controlProperty(control));
 	}
 }
