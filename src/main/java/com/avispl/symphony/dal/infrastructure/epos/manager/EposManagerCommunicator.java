@@ -572,7 +572,17 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			loginInfo = new LoginInfo(token, expiresIn);
 
 		} catch (HttpClientErrorException e) {
-			if (e.getStatusCode() == HttpStatus.BAD_REQUEST) {
+			boolean badRequest = false;
+			try {
+				org.springframework.http.HttpStatusCode status = e.getStatusCode();
+				badRequest = status.value() == HttpStatus.UNAUTHORIZED.value();
+			} catch (NoSuchMethodError nsme) {
+				logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
+				int code = e.getRawStatusCode();
+				badRequest = code == HttpStatus.BAD_REQUEST.value();
+			}
+
+			if (badRequest) {
 				JsonNode response = objectMapper.readTree(e.getResponseBodyAsString());
 				if (response.has("error") && "invalid_client".equalsIgnoreCase(response.get("error").asText())) {
 					throw new FailedLoginException("Unable to login. Please check device credentials");
