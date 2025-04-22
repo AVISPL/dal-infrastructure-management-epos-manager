@@ -549,7 +549,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			// Set up headers
 			HttpHeaders headers = new HttpHeaders();
 			headers.setBasicAuth(this.getLogin(), this.getPassword());
-			headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+			headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
 			// Set up request body
 			MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
