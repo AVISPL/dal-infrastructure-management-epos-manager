@@ -549,7 +549,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			// Set up headers
 			HttpHeaders headers = new HttpHeaders();
 			headers.setBasicAuth(this.getLogin(), this.getPassword());
-			headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+			headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
 			// Set up request body
 			MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
@@ -573,14 +573,14 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 
 		} catch (HttpClientErrorException e) {
 			boolean badRequest = false;
-			try {
-				org.springframework.http.HttpStatusCode status = e.getStatusCode();
-				badRequest = status.value() == HttpStatus.UNAUTHORIZED.value();
-			} catch (NoSuchMethodError nsme) {
+//			try {
+//				org.springframework.http.HttpStatusCode status = e.getStatusCode();
+//				badRequest = status.value() == HttpStatus.UNAUTHORIZED.value();
+//			} catch (NoSuchMethodError nsme) {
 				logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
 				int code = e.getRawStatusCode();
 				badRequest = code == HttpStatus.BAD_REQUEST.value();
-			}
+//			}
 
 			if (badRequest) {
 				JsonNode response = objectMapper.readTree(e.getResponseBodyAsString());
