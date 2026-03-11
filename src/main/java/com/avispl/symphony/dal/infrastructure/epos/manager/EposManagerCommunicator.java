@@ -5,10 +5,6 @@
 package com.avispl.symphony.dal.infrastructure.epos.manager;
 
 import java.io.IOException;
-import java.net.ConnectException;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
-import java.net.UnknownHostException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Properties;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -131,8 +128,8 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 					logger.debug("Fetching other than aggregated device list");
 				}
 
-				long currentTimestamp = System.currentTimeMillis();
-				if (!flag && nextDevicesCollectionIterationTimestamp <= currentTimestamp) {
+				long startCycle = System.currentTimeMillis();
+				if (!flag && nextDevicesCollectionIterationTimestamp <= startCycle) {
 					populateDeviceDetail();
 					flag = true;
 				}
@@ -150,7 +147,13 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 				}
 
 				if (flag) {
-					nextDevicesCollectionIterationTimestamp = System.currentTimeMillis() + 30000;
+					try {
+						nextDevicesCollectionIterationTimestamp = System.currentTimeMillis() + (getMonitoringRate() * 60000L);
+					} catch (NoSuchMethodError error) {
+						nextDevicesCollectionIterationTimestamp = System.currentTimeMillis() + 60000L;
+						logger.error("Unsupported feature: getMonitoringRate isn't available on current Cloud Connector version.", error);
+					}
+					lastMonitoringCycleDuration = Math.max((System.currentTimeMillis() - startCycle) / 1000, 1L);
 					flag = false;
 				}
 
@@ -236,6 +239,9 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	 */
 	private final ReentrantLock reentrantLock = new ReentrantLock();
 
+	/** Application configuration loaded from {@code version.properties}. */
+	private final Properties versionProperties = new Properties();
+
 	/**
 	 * Private variable representing the local extended statistics.
 	 */
@@ -250,6 +256,11 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	 * List of aggregated device
 	 */
 	private final List<AggregatedDevice> aggregatedDeviceList = Collections.synchronizedList(new ArrayList<>());
+
+	/** Device adapter instantiation timestamp. */
+	private long adapterInitializationTimestamp = System.currentTimeMillis();
+
+	private Long lastMonitoringCycleDuration = 1L;
 
 	/**
 	 * Login information
@@ -350,58 +361,6 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		this.pingMode = PingMode.ofString(pingMode);
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * <p>
-	 *
-	 * Check for available devices before retrieving the value
-	 * ping latency information to Symphony
-	 */
-	@Override
-	public int ping() throws Exception {
-		if (this.pingMode == PingMode.ICMP) {
-			return super.ping();
-		} else if (this.pingMode == PingMode.TCP) {
-			if (isInitialized()) {
-				long pingResultTotal = 0L;
-
-				for (int i = 0; i < this.getPingAttempts(); i++) {
-					long startTime = System.currentTimeMillis();
-
-					try (Socket puSocketConnection = new Socket(this.host, this.getPort())) {
-						puSocketConnection.setSoTimeout(this.getPingTimeout());
-						if (puSocketConnection.isConnected()) {
-							long pingResult = System.currentTimeMillis() - startTime;
-							pingResultTotal += pingResult;
-							if (this.logger.isTraceEnabled()) {
-								this.logger.trace(String.format("PING OK: Attempt #%s to connect to %s on port %s succeeded in %s ms", i + 1, host, this.getPort(), pingResult));
-							}
-						} else {
-							if (this.logger.isDebugEnabled()) {
-								logger.debug(String.format("PING DISCONNECTED: Connection to %s did not succeed within the timeout period of %sms", host, this.getPingTimeout()));
-							}
-							return this.getPingTimeout();
-						}
-					} catch (SocketTimeoutException | ConnectException tex) {
-						throw new SocketTimeoutException("Socket connection timed out");
-					} catch (UnknownHostException tex) {
-						throw new SocketTimeoutException("Socket connection timed out" + tex.getMessage());
-					} catch (Exception e) {
-						if (this.logger.isWarnEnabled()) {
-							this.logger.warn(String.format("PING TIMEOUT: Connection to %s did not succeed, UNKNOWN ERROR %s: ", host, e.getMessage()));
-						}
-						return this.getPingTimeout();
-					}
-				}
-				return Math.max(1, Math.toIntExact(pingResultTotal / this.getPingAttempts()));
-			} else {
-				throw new IllegalStateException("Cannot use device class without calling init() first");
-			}
-		} else {
-			throw new IllegalArgumentException("Unknown PING Mode: " + pingMode);
-		}
-	}
-
 
 	/**
 	 * Constructs a new instance of EPOS Manager.
@@ -421,12 +380,15 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		try {
 			checkAuthentication();
 			Map<String, String> statistics = new HashMap<>();
+			Map<String, String> dynamicStatistics = new HashMap<>();
 			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 			getTenantsInfo();
+			getDevices();
 			populateTenantInfo(statistics);
+			this.populateAdapterMetadata(statistics, dynamicStatistics);
 
-			getNumberOfDevice(statistics);
 			extendedStatistics.setStatistics(statistics);
+			extendedStatistics.setDynamicStatistics(dynamicStatistics);
 			localExtendedStatistics = extendedStatistics;
 		} finally {
 			reentrantLock.unlock();
@@ -477,6 +439,11 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		if (logger.isDebugEnabled()) {
 			logger.debug("Internal init is called.");
 		}
+		try {
+			this.versionProperties.load(this.getClass().getResourceAsStream("/version.properties"));
+		} catch (IOException e) {
+			this.logger.error("Failed to load version properties file.", e);
+		}
 		String apiSubDomain = getCurrentEnvironment().getApiCallSubDomain();
 		this.defaultHostName = this.getHost();
 		this.setHost(createRequestUrl(apiSubDomain, this.defaultHostName));
@@ -513,6 +480,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		this.loginInfo = null;
 		this.defaultHostName = EposManagerConstant.NONE;
 		this.tenantId = EposManagerConstant.EMPTY;
+		this.versionProperties.clear();
 		super.internalDestroy();
 	}
 
@@ -623,6 +591,23 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 		}
 	}
 
+	private void populateAdapterMetadata(Map<String, String> stats, Map<String, String> dynamicStats) {
+		long adapterUptime = System.currentTimeMillis() - adapterInitializationTimestamp;
+
+		stats.put(EposManagerConstant.ADAPTER_BUILD_DATE, this.versionProperties.getProperty("adapter.build.date"));
+		stats.put(EposManagerConstant.ADAPTER_UPTIME, this.normalizeUptime(adapterUptime / 1000));
+		stats.put(EposManagerConstant.ADAPTER_UPTIME_MIN, String.valueOf(adapterUptime / (1000 * 60)));
+		stats.put(EposManagerConstant.ADAPTER_VERSION, this.versionProperties.getProperty("adapter.version"));
+		try {
+			stats.put(EposManagerConstant.MONITORED_CYCLE_INTERVAL, String.valueOf(this.getMonitoringRate()));
+		} catch (NoSuchMethodError error) {
+			logger.warn("Unsupported feature: getMonitoringRate isn't available on current Cloud Connector version.", error);
+			stats.put(EposManagerConstant.MONITORED_CYCLE_INTERVAL, "N/A");
+		}
+		dynamicStats.put(EposManagerConstant.LAST_MONITORING_CYCLE_DURATION, String.valueOf(this.lastMonitoringCycleDuration));
+		dynamicStats.put(EposManagerConstant.MONITORED_DEVICES_TOTAL, String.valueOf(this.devicePage.getAggregatedDevices().size()));
+	}
+
 	/**
 	 * Retrieve tenant information by sending GET request to Epos API endpoint.
 	 */
@@ -715,24 +700,21 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 	/**
 	 * Retrieve total number of device by sending GET request to EPOS Manager API.
 	 */
-	private void getNumberOfDevice(Map<String, String> stats){
+	private void getDevices() {
 		try {
 			int take = 1, skip = 0;
 			Tenant tenant = tenantPage.getSelectedTenant();
 			if (tenant == null){
-				stats.put(EposManagerConstant.TOTAL_DEVICES, "0");
 				return;
 			}
 
 			String url = String.format(EposManagerUri.DEVICES, tenant.getTenantId(), take, skip);
 			JsonNode response = this.doGet(url, JsonNode.class);
 
-			int deviceNumber = 0;
 			if (response != null && response.has("total")) {
-				deviceNumber = response.get("total").asInt();
+				int deviceNumber = response.get("total").asInt();
 				devicePage.setTotalItem(deviceNumber);
 			}
-			stats.put(EposManagerConstant.TOTAL_DEVICES, String.valueOf(deviceNumber));
 		} catch (FailedLoginException e) {
 			loginInfo = null;
 			logger.error("Authentication credentials are invalid, access token might be expired", e);
@@ -860,5 +842,36 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			return subDomain;
 		}
 		return subDomain + EposManagerConstant.DOT + hostName;
+	}
+
+	/**
+	 * Uptime is received in seconds, need to normalize it and make it human-readable, like 1 d 5 hr 12 min 55 sec.
+	 * Incoming parameter is may have a decimal point, so in order to safely process this - it's rounded first.
+	 * We don't need to add a segment of time if it's 0.
+	 *
+	 * @param uptimeSeconds value in seconds
+	 * @return string value of format 'x d x hr x min x sec'
+	 */
+	private String normalizeUptime(long uptimeSeconds) {
+		StringBuilder normalizedUptime = new StringBuilder();
+
+		long seconds = uptimeSeconds % 60;
+		long minutes = uptimeSeconds % 3600 / 60;
+		long hours = uptimeSeconds % 86400 / 3600;
+		long days = uptimeSeconds / 86400;
+
+		if (days > 0) {
+			normalizedUptime.append(days).append(" d ");
+		}
+		if (hours > 0) {
+			normalizedUptime.append(hours).append(" hr ");
+		}
+		if (minutes > 0) {
+			normalizedUptime.append(minutes).append(" min ");
+		}
+		if (seconds > 0 || normalizedUptime.isEmpty()) {
+			normalizedUptime.append(seconds).append(" sec");
+		}
+		return normalizedUptime.toString().trim();
 	}
 }
