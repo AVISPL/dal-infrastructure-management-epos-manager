@@ -27,8 +27,10 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.LinkedCaseInsensitiveMap;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.util.MultiValueMapAdapter;
 import org.springframework.web.client.HttpClientErrorException;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -524,7 +526,10 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			body.add("grant_type", "client_credentials");
 
 			// Send POST request to device
-			HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+			// Pass headers as a MultiValueMap: new HttpEntity<>(body, HttpHeaders) links to different constructors in Spring 6 and 7
+			MultiValueMap<String, String> requestHeaders = new MultiValueMapAdapter<>(new LinkedCaseInsensitiveMap<>());
+			headers.forEach(requestHeaders::put);
+			HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, requestHeaders);
 			String loginSubDomain = getCurrentEnvironment().getTokenGenerationSubDomain();
 
 			ResponseEntity<JsonNode> responseEntity = this.obtainRestTemplate()
@@ -540,15 +545,7 @@ public class EposManagerCommunicator extends RestCommunicator implements Aggrega
 			loginInfo = new LoginInfo(token, expiresIn);
 
 		} catch (HttpClientErrorException e) {
-			boolean badRequest = false;
-			try {
-				org.springframework.http.HttpStatusCode status = e.getStatusCode();
-				badRequest = status.value() == HttpStatus.UNAUTHORIZED.value();
-			} catch (NoSuchMethodError nsme) {
-				logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
-				int code = e.getRawStatusCode();
-				badRequest = code == HttpStatus.BAD_REQUEST.value();
-			}
+			boolean badRequest = e.getStatusCode().value() == HttpStatus.UNAUTHORIZED.value();
 
 			if (badRequest) {
 				JsonNode response = objectMapper.readTree(e.getResponseBodyAsString());

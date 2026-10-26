@@ -28,7 +28,7 @@ jobs:
         run: echo "date=$(date +'%y%m%d' | cut -c 2-)" >> $GITHUB_OUTPUT
       - name: Get project version
         id: pversion
-        run: echo "ver=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout| sed -e 's/-SNAPSHOT//g')" >> $GITHUB_OUTPUT
+        run: echo "ver=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout | tail -n 1 | sed -e 's/-SNAPSHOT//g')" >> $GITHUB_OUTPUT
 
   tag:
     runs-on: ubuntu-latest
